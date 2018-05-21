@@ -207,18 +207,6 @@ acc_profile <- acc_profile %>% .[, factor_clusters := factor(clusters)] %>% .[, 
 # Merge with expression data using all samples 
 accrna_prof <- merge(rna_all_stats, acc_profile, by = c("id")) %>% setorder(clusters) 
 rm(acc_profile)
-
-# # Process to get statistics only for cells that pass filtering
-# dt_N <- NROW(acc_profile)
-# rna_filt <- data.table(id=character(dt_N), gene=character(dt_N), mean_expr=numeric(dt_N), median_expr=numeric(dt_N), var_expr = numeric(dt_N), sd_expr = numeric(dt_N), cv_expr = numeric(dt_N))
-# # Iterate over each region
-# for (i in 1:NROW(acc_profile)){
-#   res <- rna_dt[id == acc_profile$id[i] & sample %in% acc_profile$cell_names[[i]], .(mean_expr=mean(expr), median_expr=median(expr), var_expr=var(expr), sd_expr=sd(expr), cv_expr=sd(expr)/mean(expr)), by=c("id","gene")]
-#   if (NROW(res) > 0 ){ set(rna_filt, i, 1:7, res) }
-# }
-# rna_filt    <- rna_filt %>% .[id != ""]  # Remove genes that we had no metadata information
-# accrna_filt <- merge(rna_filt, acc_profile, by = c("id")) %>% setorder(clusters) # Merge data
-# accrna_filt <- accrna_filt %>% .[, clusters := factor(clusters)] %>% .[, N := .N, by = clusters] %>% .[N > 10] # Make clusters as factors
 ```
 
 <!-- # Merge all data in one data.table object -->
@@ -238,14 +226,10 @@ accrna <- accrna %>% .[, discr_expr_levels := cut(mean_expr, breaks = c(0 , 0.00
 
 # Accessibility conservation and expression relationship
 
-## Using likelihood information and BIC 
-To quantify the conservation of accessibility patterns around promoters we use the likelihood information from the fitted profiles. Essentially we try and cluster the accessibility profiles of a gene across all cells. Initially, we start with one cluster, and then we increase the number of clusters $k$, by also computing the Bayesian Information Criterio (BIC). The BIC helps us to perform model selection and we choose the number of clusters k with the lowest BIC. 
-So genes with low number of clusters are more conserved in terms of their accessibility profiles. This is because with a small number of clusters we could explain all the information encoded in the profile of each cell. (__Need to explain this better, probably using a generative modelling approach this would make more sense?__)
-
 The region for the accesibility profiles is $\pm 200$ around TSS. 
 
 ## Association with mean expression
-We observe that accessibility conservation around promoter regions is positively correlated with mean expression levels, i.e. genes with tightly controlled chromatin accessibility patterns have higher expression levels across cells. However when looking at accessibility rate variability and mean expression we cannot capture this signal, and they seem uncorrelated.
+We observe that accessibility conservation around promoter regions is positively correlated with mean expression levels.
 ```{r associate, echo=FALSE, warning=FALSE, message=FALSE}
 # Acc profile conservation - Mean expression association
 p <- ggplot(accrna[,c("factor_clusters", "mean_expr", "N")], aes(x=factor_clusters, y=mean_expr)) +
@@ -264,7 +248,7 @@ invisible(pdf(file = paste0(io$out_dir, "box_accRateVar_exprMean.pdf"), width = 
 rm(p)
 ```
 
-Here we show the relationship between the accessibility conservation profiles and mean accessibility rate. In general we positive correlation: the more conserved is the accessibility between cells the higher the mean accessibility. This means that open chromatin regions tend to be more stable across cells. However when relating acc profile conservation with acc rate variability weobserve a strange association.
+Here we show the relationship between the accessibility conservation profiles and mean accessibility rate.
 ```{r associate_2, echo=FALSE, warning=FALSE, message=FALSE,fig.width=9, fig.height=9}
 # Acc profile conservation - Acc rate association
 p1 <- ggplot(accrna[,c("factor_clusters", "mean_acc", "N")], aes(x=factor_clusters, y=mean_acc)) +
@@ -298,7 +282,6 @@ rm(p)
 ```
 
 ## Association with expression variability
-To associate the relationship of accessibility conservation with expression variability, I will use to different metrics: variance and coefficient of variation (CV). The CV is often used to measure the variability of scRNA-Seq data, e.g. [Grun et. al. (2014)](http://www.nature.com/nmeth/journal/v11/n6/full/nmeth.2930.html?foxtrotcallback=true) and work from John as well.
 
 ```{r mean_var_expr, eval=FALSE, echo=FALSE, warning=FALSE, message=FALSE, fig.width=9, fig.height=12}
 # Expression mean - variance relationship
@@ -312,52 +295,6 @@ plot(pp)
 invisible(pdf(file = paste0(io$out_dir, "scatter_exprStats.pdf"), width = 9, height = 12, useDingbats=FALSE)); print(pp); invisible(dev.off())
 rm(p1, p2, p3, pp)
 ```
-Let's see first the relationship of mean expression with variance, CV and overdispersion, respectively (i.e. look at the left column). For the mean-CV relationship we obtain the same plot as the paper above, where lowly expressed genes have higher coefficient of variation. On the other hand, for the mean-variance relationship we obtain a bell-shape curve, where moderately expressed genes have the highest variance, mostly due to dropouts. The next two columns show the relationship between Acc conservation and the different summary statistics for gene expression, which are shown in the leftmost column.
-```{r acc_var_expr, echo=FALSE, warning=FALSE, message=FALSE,fig.width=18, fig.height=14}
-# Expression mean - variance relationship
-p01 <- scatter_plot(accrna[, c("mean_expr", "var_expr", "clusters")], xlabel = "Mean expression", ylabel = "Expr variance", title = "", lm = TRUE, loess = TRUE)
-# Expression mean - CV relationship
-p02 <- scatter_plot(accrna[, c("mean_expr", "cv_expr", "clusters")], xlabel = "Mean expression", ylabel = "Expr log2CV", title = "", lm = TRUE, loess = TRUE)
-# Expression mean - overdispersion relationship
-p03 <- scatter_plot(accrna[, c("mean_expr", "overdispersion", "clusters")], xlabel = "Mean expression", ylabel = "Expr overdisp", title = "", lm = TRUE, loess = TRUE)
-# Acc conservation - Expression variance association
-p1 <- ggplot(accrna[,c("factor_clusters","var_expr", "N")], aes(x=factor_clusters, y=var_expr)) +
-  geom_boxplot(alpha=0.8, outlier.shape=NA, fill="#00BFC4") + geom_hline(yintercept=0, colour="black", linetype="dashed") +
-  stat_summary(fun.y = function(x){ xx <- min(x); return(xx - 0.7)}, aes(label = paste0("N=", as.character(N))), geom='text', col='black', size = 5) +
-  labs(title=NULL, x="Clusters (i.e. conservation)", y="Expression variance") + boxplot_theme()
-# Acc conservation - Expression CV association
-p2 <- ggplot(accrna[,c("factor_clusters","cv_expr", "N")], aes(x=factor_clusters, y=cv_expr)) +
-  geom_boxplot(alpha=0.8, outlier.shape=NA, fill="#00BFC4") + geom_hline(yintercept=0, colour="black", linetype="dashed") +
-  stat_summary(fun.y = function(x){ xx <- -4; return(xx - 0.7)}, aes(label = paste0("N=", as.character(N))), geom='text', col='black', size = 5) +
-  labs(title=NULL, x="Clusters (i.e. conservation)", y="Expression log2 CV") + boxplot_theme()
-# Acc conservation - Expression overdispersion association
-p3 <- ggplot(accrna[,c("factor_clusters","overdispersion", "N")], aes(x=factor_clusters, y=overdispersion)) +
-  geom_boxplot(alpha=0.8, outlier.shape=NA, fill="#00BFC4") + geom_hline(yintercept=0, colour="black", linetype="dashed") +
-  stat_summary(fun.y = function(x){ xx <- -2; return(xx - 0.7)}, aes(label = paste0("N=", as.character(N))), geom='text', col='black', size = 5) +
-  scale_y_continuous(limits = c(-3, 2)) +
-  labs(title=NULL, x="Clusters (i.e. conservation)", y="Expression overdisp") + boxplot_theme()
-
-# Acc rate conservation - Expression variance association
-p12 <- ggplot(accrna[,c("acc_var_levels","var_expr")], aes(x=acc_var_levels, y=var_expr)) +
-  geom_boxplot(alpha=0.8, outlier.shape=NA, fill="#00BFC4") + geom_hline(yintercept=0, colour="black", linetype="dashed") +
-  labs(title=NULL, x="Accessibility rate variance", y="Expression variance") + boxplot_theme()
-# Acc rate conservation - Expression CV association
-p22 <- ggplot(accrna[,c("acc_var_levels","cv_expr")], aes(x=acc_var_levels, y=cv_expr)) +
-  geom_boxplot(alpha=0.8, outlier.shape=NA, fill="#00BFC4") + geom_hline(yintercept=0, colour="black", linetype="dashed") +
-  labs(title=NULL, x="Accessibility rate variance", y="Expression log2 CV") + boxplot_theme()
-# Acc rate conservation - Expression overdispersion association
-p32 <- ggplot(accrna[,c("acc_var_levels","overdispersion")], aes(x=acc_var_levels, y=overdispersion)) +
-  geom_boxplot(alpha=0.8, outlier.shape=NA, fill="#00BFC4") + geom_hline(yintercept=0, colour="black", linetype="dashed") +
-  scale_y_continuous(limits = c(-3, 2)) +
-  labs(title=NULL, x="Accessibility rate variance", y="Expression overdisp") + boxplot_theme()
-
-pp <- cowplot::plot_grid(p01, p1, p12, p02, p2, p22, p03, p3, p32, label_size = 30, labels="AUTO", ncol = 3, nrow = 3, rel_widths = c(1, 1, 1))
-plot(pp)
-invisible(pdf(file = paste0(io$out_dir, "box_accCons_exprStats.pdf"), width = 18, height = 14, useDingbats=FALSE)); print(pp); invisible(dev.off())
-rm(p1, p2, p3, p01, p02, p03, p12, p22, p32, pp)
-```
-We observe (see 2nd column boxplots) that there is some association between conservation and CV, the lowest the conservation (i.e. more clusters) the highest the variability in terms of CV. (__Concerns: Is this actual association or is actually artefact coming from the mean-CV relationship of gene expression I showed before. That is, lowly expressed genes have higher CV, and since for examples genes with 4 or 5 clustes have almost 0 mean they will have high CV?__). The right boxplots show the relationship of accessibility rate variance with the different expression summary statistics, and in general we see no association.
-
 
 # GO analysis
 Here we perform Gene Ontology analysis to see whether specific clusters of genes are enriched for specific pathways.
@@ -609,5 +546,3 @@ plur_genes <- merge(plur_genes, accrna, by = c("id", "gene"))
 print(plur_genes[, .N, by = factor_clusters])
 ```
 
-# TODO list
-1. Again from the list of genes in each cluster could we get the proportion of genes with specific histone marks that they are they associated? Essentially try to get a similar figure as [Guo et. al (2017)](http://www.nature.com/cr/journal/vaop/ncurrent/full/cr201782a.html), see Figure 1.E and 1.F. In their analysis they also used the Coefficient of Variation (CV) to measure variability of expressed genes (Figure 1.E right)!

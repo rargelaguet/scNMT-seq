@@ -143,15 +143,4 @@ for (m in 1:length(prof_cells$W_draws)){
   print(pp[[m]])
   dev.off()
 }
-
-#   if (k < length(prof_cells$W_draws)){
-#     obs <- as.data.table(gene[[k]]) %>% setnames(c("x", "y"))
-#     pp[[k]] <- ggplot_bpr_profiles(X = dt, obs = obs, title = paste0("Cell ", cells_names[k]), subtitle = paste0("Expr = ", round(rna_dt[id == gene_id & sample == cells_names[k], expr], 3)),  up_label = "-200bp", down_label = "+200bp", middle_label = "TSS")
-#   }else{
-#     obs <- as.data.table(bulk) %>% setnames(c("x", "y"))
-#     pp[[k]] <- ggplot_bpr_profiles(X = dt, obs = obs, title = "Bulk profile", subtitle = paste0("Mean expr = ", round(rna_dt[id == gene_id, mean(expr)], 3)), up_label = "-200bp", down_label = "+200bp", middle_label = "TSS")
-#   }
-#   print(pp[[k]])
-# }
-# dev.off()
 ```
